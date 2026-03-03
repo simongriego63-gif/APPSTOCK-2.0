@@ -122,7 +122,7 @@
             cont.innerHTML = '<p class="text-center py-10 text-slate-400 italic">Consultando inventario...</p>';
             const res = await fetch(`https://api.appsheet.com/api/v2/apps/${API.id}/tables/${API.prod}/Action`, {
                 method: 'POST', headers: { 'ApplicationAccessKey': API.key },
-                body: JSON.stringify({ "Action": "Find", "Rows": [] })
+                body: JSON.stringify({ "Action": "FindAll", "Rows": [] })
             });
             const data = await res.json();
             cont.innerHTML = data.map(p => `<div class="bg-white p-5 rounded-2xl border border-slate-100 font-bold text-slate-700 shadow-sm flex justify-between items-center">${p.PRODUCTO || p.NOMBRES}<i class="fas fa-box text-slate-200 text-sm"></i></div>`).join('');
