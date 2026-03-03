@@ -81,98 +81,102 @@
         <div id="lista-hist" class="grid gap-3"></div>
     </div>
 
-    <script>
+ <script>
 const API = {
-    id: "927a8f4f-34af-4e0e-8e19-4b304e84b1d2", // Cambié / por ,
-    key: "V2-SU8cK-s6uVM-8A6K8-gor0L-f0sTx-hSJ2F-FLhOW-dgmLx",
+    id: "927a8f4f-34af-4e0e-8e19-4b304e84b1d2", // Corregido: coma en lugar de barra
+    key: "V2-cW4hV-UzYVg-fVZsr-9eYBT-g2W5n-t0Xt9-llmZI-7PDra",
     mov: "MOVIMIENTOS",
     prod: "PRODUCTOS"
 };
-        let tipoSel = "Entrada";
 
-        function showPage(p) {
-            document.querySelectorAll('div[id$="-screen"]').forEach(d => d.classList.add('hidden'));
-            document.getElementById(p + '-screen').classList.remove('hidden');
-        }
+let tipoSel = "Entrada";
 
-        function setTipo(t) {
-            tipoSel = t;
-            document.getElementById('btn-ent').className = t === 'Entrada' ? "btn-tipo p-4 rounded-2xl active-entrada" : "btn-tipo p-4 rounded-2xl text-slate-400 bg-slate-50";
-            document.getElementById('btn-sal').className = t === 'Salida' ? "btn-tipo p-4 rounded-2xl active-salida" : "btn-tipo p-4 rounded-2xl text-slate-400 bg-slate-50";
-        }
+// Función maestra para las peticiones (agrega los headers necesarios)
+async function callAppSheet(tableName, action, rows = []) {
+    const url = `https://api.appsheet.com/api/v2/apps/${API.id}/tables/${tableName}/Action`;
+    
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 
+            'ApplicationAccessKey': API.key,
+            'Content-Type': 'application/json' // ESTO ARREGLA EL ERROR 415
+        },
+        body: JSON.stringify({
+            "Action": action,
+            "Properties": { "Locale": "es-AR" },
+            "Rows": rows
+        })
+    });
+    return await response.json();
+}
 
-        async function abrirCarga() {
-            showPage('movimientos');
-            setTipo('Entrada');
-            const sel = document.getElementById('selectProd');
-            sel.innerHTML = '<option>Cargando...</option>';
-            const res = await fetch(`https://api.appsheet.com/api/v2/apps/${API.id}/tables/${API.prod}/Action`, {
-                method: 'POST', headers: { 'ApplicationAccessKey': API.key },
-                body: JSON.stringify({ "Action": "Find", "Rows": [] })
-            });
-            const data = await res.json();
-            // Mapea PRODUCTO o NOMBRES para que encaje con tu tabla
-            sel.innerHTML = data.map(p => `<option value="${p.PRODUCTO || p.NOMBRES}">${p.PRODUCTO || p.NOMBRES}</option>`).join('');
-        }
+function showPage(p) {
+    document.querySelectorAll('div[id$="-screen"]').forEach(d => d.classList.add('hidden'));
+    document.getElementById(p + '-screen').classList.remove('hidden');
+}
 
-        async function verProductos() {
-            showPage('productos');
-            const cont = document.getElementById('lista-prods');
-            cont.innerHTML = '<p class="text-center py-10 text-slate-400 italic">Consultando inventario...</p>';
-            const res = await fetch(`https://api.appsheet.com/api/v2/apps/${API.id}/tables/${API.prod}/Action`, {
-                method: 'POST', headers: { 'ApplicationAccessKey': API.key },
-                body: JSON.stringify({ "Action": "Find", "Rows": [] })
-            });
-            const data = await res.json();
-            cont.innerHTML = data.map(p => `<div class="bg-white p-5 rounded-2xl border border-slate-100 font-bold text-slate-700 shadow-sm flex justify-between items-center">${p.PRODUCTO || p.NOMBRES}<i class="fas fa-box text-slate-200 text-sm"></i></div>`).join('');
-        }
+function setTipo(t) {
+    tipoSel = t;
+    document.getElementById('btn-ent').className = t === 'Entrada' ? "btn-tipo p-4 rounded-2xl active-entrada" : "btn-tipo p-4 rounded-2xl text-slate-400 bg-slate-50";
+    document.getElementById('btn-sal').className = t === 'Salida' ? "btn-tipo p-4 rounded-2xl active-salida" : "btn-tipo p-4 rounded-2xl text-slate-400 bg-slate-50";
+}
 
-        async function verHistorial() {
-            showPage('historial');
-            const cont = document.getElementById('lista-hist');
-            cont.innerHTML = '<p class="text-center py-10 text-slate-400 italic">Buscando registros...</p>';
-            const res = await fetch(`https://api.appsheet.com/api/v2/apps/${API.id}/tables/${API.mov}/Action`, {
-                method: 'POST', headers: { 'ApplicationAccessKey': API.key },
-                body: JSON.stringify({ "Action": "Find", "Rows": [] })
-            });
-            const data = await res.json();
-            cont.innerHTML = data.reverse().slice(0, 15).map(m => `
-                <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
-                    <div><p class="font-black text-slate-800">${m.PRODUCTO}</p><p class="text-[10px] text-slate-400 font-bold uppercase">${m.FECHA}</p></div>
-                    <span class="font-black ${m.TIPO === 'Entrada' ? 'text-emerald-500' : 'text-red-500'} text-lg">${m.TIPO === 'Entrada' ? '+' : '-'}${m.CANTIDAD}</span>
-                </div>`).join('');
-        }
+async function abrirCarga() {
+    showPage('movimientos');
+    setTipo('Entrada');
+    const sel = document.getElementById('selectProd');
+    sel.innerHTML = '<option>Cargando...</option>';
+    
+    try {
+        const data = await callAppSheet(API.prod, "Find");
+        sel.innerHTML = data.map(p => `<option value="${p.PRODUCTO || p.NOMBRES}">${p.PRODUCTO || p.NOMBRES}</option>`).join('');
+    } catch (e) {
+        sel.innerHTML = '<option>Error al cargar</option>';
+    }
+}
 
-        function nuevoProdPrompt() {
-            const n = prompt("Nombre del nuevo producto:");
-            if(n) crearProducto(n);
-        }
+async function verProductos() {
+    showPage('productos');
+    const cont = document.getElementById('lista-prods');
+    cont.innerHTML = '<p class="text-center py-10 text-slate-400 italic">Consultando inventario...</p>';
+    
+    const data = await callAppSheet(API.prod, "Find");
+    cont.innerHTML = data.map(p => `<div class="bg-white p-5 rounded-2xl border border-slate-100 font-bold text-slate-700 shadow-sm flex justify-between items-center">${p.PRODUCTO || p.NOMBRES}<i class="fas fa-box text-slate-200 text-sm"></i></div>`).join('');
+}
 
-        async function crearProducto(nombre) {
-            await fetch(`https://api.appsheet.com/api/v2/apps/${API.id}/tables/${API.prod}/Action`, {
-                method: 'POST', headers: { 'ApplicationAccessKey': API.key },
-                body: JSON.stringify({ "Action": "Add", "Rows": [{ "PRODUCTO": nombre, "NOMBRES": nombre }] })
-            });
-            verProductos();
-        }
+async function verHistorial() {
+    showPage('historial');
+    const cont = document.getElementById('lista-hist');
+    cont.innerHTML = '<p class="text-center py-10 text-slate-400 italic">Buscando registros...</p>';
+    
+    const data = await callAppSheet(API.mov, "Find");
+    cont.innerHTML = data.reverse().slice(0, 15).map(m => `
+        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
+            <div><p class="font-black text-slate-800">${m.PRODUCTO}</p><p class="text-[10px] text-slate-400 font-bold uppercase">${m.FECHA}</p></div>
+            <span class="font-black ${m.TIPO === 'Entrada' ? 'text-emerald-500' : 'text-red-500'} text-lg">${m.TIPO === 'Entrada' ? '+' : '-'}${m.CANTIDAD}</span>
+        </div>`).join('');
+}
 
-        async function guardarMov() {
-            const btn = document.getElementById('btnSave');
-            btn.disabled = true; btn.innerText = "Sincronizando...";
-            await fetch(`https://api.appsheet.com/api/v2/apps/${API.id}/tables/${API.mov}/Action`, {
-                method: 'POST', headers: { 'ApplicationAccessKey': API.key },
-                body: JSON.stringify({
-                    "Action": "Add",
-                    "Rows": [{
-                        "PRODUCTO": document.getElementById('selectProd').value,
-                        "CANTIDAD": parseInt(document.getElementById('inputCant').value),
-                        "TIPO": tipoSel,
-                        "FECHA": new Date().toLocaleString()
-                    }]
-                })
-            });
-            alert("¡Guardado!"); location.reload();
-        }
-    </script>
+async function crearProducto(nombre) {
+    await callAppSheet(API.prod, "Add", [{ "PRODUCTO": nombre, "NOMBRES": nombre }]);
+    verProductos();
+}
+
+async function guardarMov() {
+    const btn = document.getElementById('btnSave');
+    btn.disabled = true; 
+    btn.innerText = "Sincronizando...";
+    
+    await callAppSheet(API.mov, "Add", [{
+        "PRODUCTO": document.getElementById('selectProd').value,
+        "CANTIDAD": parseInt(document.getElementById('inputCant').value),
+        "TIPO": tipoSel,
+        "FECHA": new Date().toISOString()
+    }]);
+    
+    alert("¡Guardado!"); 
+    location.reload();
+}
+</script>
 </body>
 </html>
