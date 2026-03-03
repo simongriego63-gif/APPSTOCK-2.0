@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock App - Simon Valenti</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { background-color: #f8fafc; font-family: 'Inter', sans-serif; }
+        .card-action { background: white; border-radius: 20px; transition: all 0.2s; border: 1px solid #e2e8f0; cursor: pointer; }
+        .card-action:active { transform: scale(0.96); background: #f1f5f9; }
+        .hidden { display: none; }
+        .btn-tipo { border: 2px solid #e2e8f0; transition: all 0.2s; width: 100%; }
+        .active-entrada { border-color: #10b981; background-color: #ecfdf5; color: #059669; }
+        .active-salida { border-color: #ef4444; background-color: #fef2f2; color: #dc2626; }
+    </style>
+</head>
+<body class="p-5">
+
+    <div id="home-screen" class="max-w-md mx-auto">
+        <header class="mb-8 pt-4">
+            <h1 class="text-3xl font-black text-slate-900">Stock App</h1>
+            <p class="text-slate-500">Gestor de Inventario</p>
+        </header>
+
+        <div class="grid gap-4">
+            <div onclick="abrirCarga()" class="card-action p-6 flex items-center gap-4">
+                <div class="w-12 h-12 bg-emerald-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-200">
+                    <i class="fas fa-plus"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-slate-800">Cargar Movimiento</h3>
+                    <p class="text-xs text-slate-400">Entradas y salidas</p>
+                </div>
+            </div>
+
+            <div onclick="verHistorial()" class="card-action p-6 flex items-center gap-4">
+                <div class="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-purple-200">
+                    <i class="fas fa-history"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-slate-800">Historial</h3>
+                    <p class="text-xs text-slate-400">Últimos registros</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="movimientos-screen" class="hidden max-w-md mx-auto">
+        <button onclick="showPage('home')" class="mb-6 text-slate-400 flex items-center gap-2"><i class="fas fa-chevron-left"></i> Volver</button>
+        
+        <div class="bg-white p-6 rounded-[24px] shadow-sm border border-slate-100">
+            <h2 class="text-xl font-bold text-slate-800 mb-6">Nuevo Movimiento</h2>
+            
+            <div class="space-y-6">
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tipo de Movimiento</label>
+                    <div class="grid grid-cols-2 gap-3 mt-2">
+                        <button id="btn-ent" onclick="setTipo('Entrada')" class="btn-tipo p-4 rounded-xl font-bold text-slate-400 bg-slate-50">Entrada</button>
+                        <button id="btn-sal" onclick="setTipo('Salida')" class="btn-tipo p-4 rounded-xl font-bold text-slate-400 bg-slate-50">Salida</button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Seleccionar Producto</label>
+                    <select id="selectProducto" class="w-full p-4 bg-slate-50 rounded-xl border-none outline-none mt-2 font-medium">
+                        <option value="">Cargando lista...</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Cantidad</label>
+                    <input type="number" id="inputCant" placeholder="0" class="w-full p-4 bg-slate-50 rounded-xl border-none outline-none mt-2 font-mono">
+                </div>
+
+                <button onclick="guardar()" id="btnSave" class="w-full bg-slate-900 text-white p-5 rounded-2xl font-bold shadow-xl active:bg-black transition-all">
+                    Confirmar Registro
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="historial-screen" class="hidden max-w-md mx-auto">
+        <button onclick="showPage('home')" class="mb-6 text-slate-400 flex items-center gap-2"><i class="fas fa-chevron-left"></i> Volver</button>
+        <h2 class="text-xl font-bold text-slate-800 mb-4">Movimientos Recientes</h2>
+        <div id="lista-historial" class="space-y-3 text-center text-slate-400 py-10 italic">
+            Cargando historial...
+        </div>
+    </div>
+
+    <script>
+        const API = {
+            id: "927a8f4f-34af-4e0e-8e19-4b304e84b1d2",
+            key: "V2-SU8cK-s6uVM-8A6K8-gor0L-f0sTx-hSJ2F-FLhOW-dgmLx",
+            mov: "MOVIMIENTOS",
+            prod: "PRODUCTOS"
+        };
+
+        let tipoSel = "";
+
+        function showPage(p) {
+            document.getElementById('home-screen').classList.add('hidden');
+            document.getElementById('movimientos-screen').classList.add('hidden');
+            document.getElementById('historial-screen').classList.add('hidden');
+            document.getElementById(p + '-screen').classList.remove('hidden');
+        }
+
+        function setTipo(t) {
+            tipoSel = t;
+            document.getElementById('btn-ent').className = t === 'Entrada' ? "btn-tipo p-4 rounded-xl font-bold active-entrada" : "btn-tipo p-4 rounded-xl font-bold text-slate-400 bg-slate-50";
+            document.getElementById('btn-sal').className = t === 'Salida' ? "btn-tipo p-4 rounded-xl font-bold active-salida" : "btn-tipo p-4 rounded-xl font-bold text-slate-400 bg-slate-50";
+        }
+
+        async function abrirCarga() {
+            showPage('movimientos');
+            const select = document.getElementById('selectProducto');
+            try {
+                const res = await fetch(`https://api.appsheet.com/api/v2/apps/${API.id}/tables/${API.prod}/Action`, {
+                    method: 'POST',
+                    headers: { 'ApplicationAccessKey': API.key, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ "Action": "Find", "Properties": {}, "Rows": [] })
+                });
+                const data = await res.json();
+                select.innerHTML = '<option value="">Elegí un producto</option>';
+                data.forEach(item => {
+                    // Busca el nombre en cualquier columna que pueda tenerlo
+                    const nombre = item.PRODUCTO || item.NOMBRES || item.Nombre || "Sin nombre";
+                    select.innerHTML += `<option value="${nombre}">${nombre}</option>`;
+                });
+            } catch (e) { select.innerHTML = '<option>Error al conectar</option>'; }
+        }
+
+        async function verHistorial() {
+            showPage('historial');
+            const lista = document.getElementById('lista-historial');
+            try {
+                const res = await fetch(`https://api.appsheet.com/api/v2/apps/${API.id}/tables/${API.mov}/Action`, {
+                    method: 'POST',
+                    headers: { 'ApplicationAccessKey': API.key, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ "Action": "Find", "Properties": {}, "Rows": [] })
+                });
+                const data = await res.json();
+                lista.innerHTML = data.length ? "" : "No hay movimientos.";
+                data.reverse().slice(0, 10).forEach(m => {
+                    const esEntrada = m.TIPO === 'Entrada';
+                    lista.innerHTML += `
+                        <div class="bg-white p-4 rounded-2xl flex justify-between items-center border border-slate-100 shadow-sm">
+                            <div class="text-left">
+                                <p class="font-bold text-slate-800">${m.PRODUCTO || '---'}</p>
+                                <p class="text-[10px] text-slate-400 uppercase font-bold">${m.FECHA || ''}</p>
+                            </div>
+                            <span class="font-black ${esEntrada ? 'text-emerald-500' : 'text-red-500'}">
+                                ${esEntrada ? '+' : '-'}${m.CANTIDAD}
+                            </span>
+                        </div>`;
+                });
+            } catch (e) { lista.innerHTML = "Error al cargar."; }
+        }
+
+        async function guardar() {
+            const btn = document.getElementById('btnSave');
+            const p = document.getElementById('selectProducto').value;
+            const c = document.getElementById('inputCant').value;
+            if(!p || !c || !tipoSel) return alert("Completa todo, Simon.");
+
+            btn.disabled = true; btn.innerText = "Guardando...";
+
+            try {
+                await fetch(`https://api.appsheet.com/api/v2/apps/${API.id}/tables/${API.mov}/Action`, {
+                    method: 'POST',
+                    headers: { 'ApplicationAccessKey': API.key, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        "Action": "Add", "Properties": { "Locale": "es-AR" },
+                        "Rows": [{ "PRODUCTO": p, "CANTIDAD": parseInt(c), "TIPO": tipoSel, "FECHA": new Date().toLocaleString() }]
+                    })
+                });
+                alert("¡Guardado con éxito!");
+                location.reload();
+            } catch (e) { alert("Error al guardar."); btn.disabled = false; btn.innerText = "Confirmar Registro"; }
+        }
+    </script>
+</body>
+</html>
