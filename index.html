@@ -80,18 +80,17 @@
         <h2 class="text-xl font-black text-slate-800 mb-6 tracking-tight">Historial de Movimientos</h2>
         <div id="lista-hist" class="grid gap-3"></div>
     </div>
-
- <script>
-const API = {
-    id: "927a8f4f-34af-4e0e-8e19-4b304e84b1d2", // Corregido: coma en lugar de barra
-    key: "V2-cW4hV-UzYVg-fVZsr-9eYBT-g2W5n-t0Xt9-llmZI-7PDra",
+<script>
+ const API = {
+    id: "927a8f4f-34af-4e0e-8e19-4b304e84b1d2",
+    key: "V2-SU8cK-s6uVM-8A6K8-gor0L-f0sTx-hSJ2F-FLhOW-dgmLx",
     mov: "MOVIMIENTOS",
     prod: "PRODUCTOS"
 };
 
 let tipoSel = "Entrada";
 
-// Función maestra para las peticiones (agrega los headers necesarios)
+// Función centralizada para evitar el error 415
 async function callAppSheet(tableName, action, rows = []) {
     const url = `https://api.appsheet.com/api/v2/apps/${API.id}/tables/${tableName}/Action`;
     
@@ -99,7 +98,7 @@ async function callAppSheet(tableName, action, rows = []) {
         method: 'POST',
         headers: { 
             'ApplicationAccessKey': API.key,
-            'Content-Type': 'application/json' // ESTO ARREGLA EL ERROR 415
+            'Content-Type': 'application/json' // Esto soluciona el error 415
         },
         body: JSON.stringify({
             "Action": action,
@@ -107,6 +106,11 @@ async function callAppSheet(tableName, action, rows = []) {
             "Rows": rows
         })
     });
+
+    if (!response.ok) {
+        throw new Error(`Error HTTP: ${response.status}`);
+    }
+
     return await response.json();
 }
 
@@ -131,7 +135,8 @@ async function abrirCarga() {
         const data = await callAppSheet(API.prod, "Find");
         sel.innerHTML = data.map(p => `<option value="${p.PRODUCTO || p.NOMBRES}">${p.PRODUCTO || p.NOMBRES}</option>`).join('');
     } catch (e) {
-        sel.innerHTML = '<option>Error al cargar</option>';
+        console.error(e);
+        sel.innerHTML = '<option>Error de conexión</option>';
     }
 }
 
@@ -140,8 +145,13 @@ async function verProductos() {
     const cont = document.getElementById('lista-prods');
     cont.innerHTML = '<p class="text-center py-10 text-slate-400 italic">Consultando inventario...</p>';
     
-    const data = await callAppSheet(API.prod, "Find");
-    cont.innerHTML = data.map(p => `<div class="bg-white p-5 rounded-2xl border border-slate-100 font-bold text-slate-700 shadow-sm flex justify-between items-center">${p.PRODUCTO || p.NOMBRES}<i class="fas fa-box text-slate-200 text-sm"></i></div>`).join('');
+    try {
+        const data = await callAppSheet(API.prod, "Find");
+        cont.innerHTML = data.map(p => `<div class="bg-white p-5 rounded-2xl border border-slate-100 font-bold text-slate-700 shadow-sm flex justify-between items-center">${p.PRODUCTO || p.NOMBRES}<i class="fas fa-box text-slate-200 text-sm"></i></div>`).join('');
+    } catch (e) {
+        console.error(e);
+        cont.innerHTML = '<p class="text-center text-red-500">Error al cargar productos</p>';
+    }
 }
 
 async function verHistorial() {
@@ -149,34 +159,57 @@ async function verHistorial() {
     const cont = document.getElementById('lista-hist');
     cont.innerHTML = '<p class="text-center py-10 text-slate-400 italic">Buscando registros...</p>';
     
-    const data = await callAppSheet(API.mov, "Find");
-    cont.innerHTML = data.reverse().slice(0, 15).map(m => `
-        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
-            <div><p class="font-black text-slate-800">${m.PRODUCTO}</p><p class="text-[10px] text-slate-400 font-bold uppercase">${m.FECHA}</p></div>
-            <span class="font-black ${m.TIPO === 'Entrada' ? 'text-emerald-500' : 'text-red-500'} text-lg">${m.TIPO === 'Entrada' ? '+' : '-'}${m.CANTIDAD}</span>
-        </div>`).join('');
+    try {
+        const data = await callAppSheet(API.mov, "Find");
+        cont.innerHTML = data.reverse().slice(0, 15).map(m => `
+            <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
+                <div><p class="font-black text-slate-800">${m.PRODUCTO}</p><p class="text-[10px] text-slate-400 font-bold uppercase">${m.FECHA}</p></div>
+                <span class="font-black ${m.TIPO === 'Entrada' ? 'text-emerald-500' : 'text-red-500'} text-lg">${m.TIPO === 'Entrada' ? '+' : '-'}${m.CANTIDAD}</span>
+            </div>`).join('');
+    } catch (e) {
+        console.error(e);
+        cont.innerHTML = '<p class="text-center text-red-500">Error al cargar historial</p>';
+    }
+}
+
+function nuevoProdPrompt() {
+    const n = prompt("Nombre del nuevo producto:");
+    if(n) crearProducto(n);
 }
 
 async function crearProducto(nombre) {
-    await callAppSheet(API.prod, "Add", [{ "PRODUCTO": nombre, "NOMBRES": nombre }]);
-    verProductos();
+    try {
+        await callAppSheet(API.prod, "Add", [{ "PRODUCTO": nombre, "NOMBRES": nombre }]);
+        verProductos();
+    } catch (e) {
+        alert("Error al crear producto");
+    }
 }
 
 async function guardarMov() {
     const btn = document.getElementById('btnSave');
+    const cant = document.getElementById('inputCant').value;
+    
+    if(!cant || cant <= 0) return alert("Ingresa una cantidad válida");
+
     btn.disabled = true; 
     btn.innerText = "Sincronizando...";
     
-    await callAppSheet(API.mov, "Add", [{
-        "PRODUCTO": document.getElementById('selectProd').value,
-        "CANTIDAD": parseInt(document.getElementById('inputCant').value),
-        "TIPO": tipoSel,
-        "FECHA": new Date().toISOString()
-    }]);
-    
-    alert("¡Guardado!"); 
-    location.reload();
+    try {
+        await callAppSheet(API.mov, "Add", [{
+            "PRODUCTO": document.getElementById('selectProd').value,
+            "CANTIDAD": parseInt(cant),
+            "TIPO": tipoSel,
+            "FECHA": new Date().toLocaleString('es-AR')
+        }]);
+        alert("¡Guardado!"); 
+        location.reload();
+    } catch (e) {
+        alert("Error al guardar el movimiento");
+        btn.disabled = false;
+        btn.innerText = "CONFIRMAR";
+    }
 }
-</script>
+<script>
 </body>
 </html>
