@@ -81,19 +81,18 @@
         <div id="lista-hist" class="grid gap-3"></div>
     </div>
 <script>
-    // 1. Configuración de la API
     const API = {
         id: "927a8f4f-34af-4e0e-8e19-4b304e84b1d2",
         key: "V2-SU8cK-s6uVM-8A6K8-gor0L-f0sTx-hSJ2F-FLhOW-dgmLx",
-        mov: "MOVIMIENTOS",
+        mov: "MOVIMIENTOS", // Asegurado: Mayúsculas y nombre exacto
         prod: "PRODUCTOS"
     };
 
     let tipoSel = "Entrada";
 
-    // 2. Función Maestra para conectar con AppSheet
     async function callAppSheet(tableName, action, rows = []) {
-        const url = `https://api.appsheet.com/api/v2/apps/${API.id}/tables/${tableName}/Action`;
+        // Usamos un proxy para evitar el error de conexión en el celular
+        const url = `https://corsproxy.io/?https://api.appsheet.com/api/v2/apps/${API.id}/tables/${tableName}/Action`;
         
         const response = await fetch(url, {
             method: 'POST',
@@ -108,11 +107,10 @@
             })
         });
 
-        if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+        if (!response.ok) throw new Error(`Error ${response.status}`);
         return await response.json();
     }
 
-    // 3. Navegación entre pantallas
     function showPage(p) {
         document.querySelectorAll('div[id$="-screen"]').forEach(d => d.classList.add('hidden'));
         const target = document.getElementById(p + '-screen');
@@ -125,20 +123,19 @@
         document.getElementById('btn-sal').className = t === 'Salida' ? "btn-tipo p-4 rounded-2xl active-salida" : "btn-tipo p-4 rounded-2xl text-slate-400 bg-slate-50";
     }
 
-    // 4. Lógica de Carga (Ajustado a tu Excel con columna NOMBRES)
+    // Ajustado a tu columna "NOMBRE" (visto en tu captura)
     async function abrirCarga() {
         showPage('movimientos');
         setTipo('Entrada');
         const sel = document.getElementById('selectProd');
-        sel.innerHTML = '<option>Cargando productos...</option>';
+        sel.innerHTML = '<option>Cargando...</option>';
         
         try {
             const data = await callAppSheet(API.prod, "Find");
             if (data && data.length > 0) {
-                // Mapeamos usando NOMBRES que es tu columna de Excel
                 sel.innerHTML = data.map(p => {
-                    const valor = p.NOMBRES || "Sin Nombre";
-                    return `<option value="${valor}">${valor}</option>`;
+                    const n = p.NOMBRE || "Sin Nombre";
+                    return `<option value="${n}">${n}</option>`;
                 }).join('');
             }
         } catch (e) {
@@ -154,8 +151,8 @@
         try {
             const data = await callAppSheet(API.prod, "Find");
             cont.innerHTML = data.map(p => {
-                const nombre = p.NOMBRES || "Producto sin nombre";
-                return `<div class="bg-white p-5 rounded-2xl border border-slate-100 font-bold text-slate-700 shadow-sm flex justify-between items-center">${nombre}<i class="fas fa-box text-slate-200 text-sm"></i></div>`;
+                const n = p.NOMBRE || "Producto";
+                return `<div class="bg-white p-5 rounded-2xl border border-slate-100 font-bold text-slate-700 shadow-sm flex justify-between items-center">${n}<i class="fas fa-box text-slate-200 text-sm"></i></div>`;
             }).join('');
         } catch (e) {
             cont.innerHTML = '<p class="text-center text-red-500">Error al cargar</p>';
@@ -184,10 +181,10 @@
         const cant = document.getElementById('inputCant').value;
         const prod = document.getElementById('selectProd').value;
         
-        if(!cant || cant <= 0) return alert("Ingresa una cantidad válida");
+        if(!cant || cant <= 0) return alert("Cantidad inválida");
 
         btn.disabled = true; 
-        btn.innerText = "Sincronizando...";
+        btn.innerText = "Guardando...";
         
         try {
             await callAppSheet(API.mov, "Add", [{
@@ -196,10 +193,10 @@
                 "TIPO": tipoSel,
                 "FECHA": new Date().toLocaleString('es-AR')
             }]);
-            alert("¡Movimiento guardado!"); 
+            alert("¡Guardado!"); 
             location.reload();
         } catch (e) {
-            alert("Error al guardar");
+            alert("Error al guardar. Revisá si la tabla MOVIMIENTOS tiene la columna PRODUCTO.");
             btn.disabled = false;
             btn.innerText = "CONFIRMAR";
         }
@@ -212,7 +209,7 @@
 
     async function crearProducto(nombre) {
         try {
-            await callAppSheet(API.prod, "Add", [{ "NOMBRES": nombre }]);
+            await callAppSheet(API.prod, "Add", [{ "NOMBRE": nombre }]);
             verProductos();
         } catch (e) {
             alert("Error al crear");
