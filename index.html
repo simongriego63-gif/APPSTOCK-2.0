@@ -220,21 +220,20 @@
             return fila["Row ID"] || fila.ID_PRODUCTO;
         }
 
+ 
+        // --- LÓGICA DE LA APP ---
+       // 1. EL TRADUCTOR DE FECHAS (Ahora respeta el Día/Mes/Año)
         function fechaArg(fechaStr) {
             if (!fechaStr) return '';
-            const f = new Date(fechaStr);
-            if (isNaN(f)) return fechaStr; 
-            
-            // Forzamos el formato estricto Día/Mes/Año
-            const dia = String(f.getDate()).padStart(2, '0');
-            const mes = String(f.getMonth() + 1).padStart(2, '0');
-            const anio = f.getFullYear();
-            const horas = String(f.getHours()).padStart(2, '0');
-            const minutos = String(f.getMinutes()).padStart(2, '0');
-            
-            return `${dia}/${mes}/${anio} ${horas}:${minutos}`;
+            // Cortamos los segundos para que quede prolijo (ej: "08/03/2026 14:30")
+            const partes = fechaStr.split(':');
+            if (partes.length === 3) {
+                return partes[0] + ':' + partes[1];
+            }
+            return fechaStr;
         }
-        // --- LÓGICA DE LA APP ---
+
+        // 2. LA CARGA INTERNA (Arrancamos el stock en 0 para no duplicar)
         async function abrirCarga() {
             showPage('movimientos');
             const sel = document.getElementById('selectProd');
@@ -243,7 +242,8 @@
                 const [prods, movs] = await Promise.all([callAppSheet(API.prod, "Find"), callAppSheet(API.mov, "Find")]);
                 
                 window.stockGlobal = {}; 
-                prods.forEach(p => window.stockGlobal[getId(p)] = parseInt(p["STOCK INICIAL"]) || 0);
+                // MAGIA: Arrancamos en 0. Los movimientos sumarán el stock inicial real.
+                prods.forEach(p => window.stockGlobal[getId(p)] = 0);
                 
                 movs.forEach(m => {
                     const cant = parseInt(m.CANTIDAD) || 0;
@@ -263,6 +263,7 @@
             }
         }
 
+        // 3. LA VISTA DE PRODUCTOS (También arrancando en 0)
         async function verProductos() {
             showPage('productos');
             const cont = document.getElementById('lista-prods');
@@ -271,7 +272,8 @@
                 const [prods, movs] = await Promise.all([callAppSheet(API.prod, "Find"), callAppSheet(API.mov, "Find")]);
                 const stockMap = {};
                 
-                prods.forEach(p => stockMap[getId(p)] = parseInt(p["STOCK INICIAL"]) || 0);
+                // MAGIA: Arrancamos en 0
+                prods.forEach(p => stockMap[getId(p)] = 0);
                 movs.forEach(m => {
                     const cant = parseInt(m.CANTIDAD) || 0;
                     if (m.TIPO === 'Entrada') stockMap[m.PRODUCTO] += cant;
@@ -303,6 +305,57 @@
             }
         }
 
+        // 4. EL CREADOR DE MOVIMIENTOS (Mandando la fecha como le gusta a AppSheet)
+        async function guardarMov() {
+            const btn = document.getElementById('btnSave');
+            const cantInput = document.getElementById('inputCant');
+            const cant = parseInt(cantInput.value);
+            const selProd = document.getElementById('selectProd');
+            const idProd = selProd.value; 
+
+            if (!idProd || idProd === "") return mostrarAlerta("Por favor, selecciona un producto válido.", "error");
+            if (!cant || cant <= 0) return mostrarAlerta("Ingresa una cantidad mayor a cero.", "error");
+
+            if (tipoSel === 'Salida') {
+                const stockDisponible = window.stockGlobal ? (window.stockGlobal[idProd] || 0) : 0;
+                if (cant > stockDisponible) {
+                    return mostrarAlerta(`No podés retirar ${cant}. Solo tenés ${stockDisponible} en stock.`, "error");
+                }
+            }
+
+            btn.disabled = true; 
+            btn.innerText = "GUARDANDO...";
+            
+            try {
+                // Forzamos la fecha a Día/Mes/Año exactamente
+                const d = new Date();
+                const dia = String(d.getDate()).padStart(2, '0');
+                const mes = String(d.getMonth() + 1).padStart(2, '0');
+                const anio = d.getFullYear();
+                const horas = String(d.getHours()).padStart(2, '0');
+                const minutos = String(d.getMinutes()).padStart(2, '0');
+                const segundos = String(d.getSeconds()).padStart(2, '0');
+                const fechaAppSheet = `${dia}/${mes}/${anio} ${horas}:${minutos}:${segundos}`;
+
+                await callAppSheet(API.mov, "Add", [{
+                    "PRODUCTO": idProd, 
+                    "CANTIDAD": cant, 
+                    "TIPO": tipoSel, 
+                    "FECHA": fechaAppSheet
+                }]);
+                
+                mostrarAlerta("¡Movimiento guardado exitosamente!", "exito"); 
+                cantInput.value = ''; 
+                abrirCarga(); 
+                
+            } catch (e) { 
+                mostrarAlerta(e.message, "error"); 
+            }
+            
+            btn.disabled = false; 
+            btn.innerText = "CONFIRMAR";
+        }
+        
         function borrarProducto(id, nombre) {
             mostrarConfirmacion(`¿Borrar el producto "${nombre}"?`, async () => {
                 try {
@@ -344,48 +397,6 @@
             }
         }
 
-        async function guardarMov() {
-            const btn = document.getElementById('btnSave');
-            const cantInput = document.getElementById('inputCant');
-            const cant = parseInt(cantInput.value);
-            const selProd = document.getElementById('selectProd');
-            const idProd = selProd.value; 
-
-            if (!idProd || idProd === "") return mostrarAlerta("Por favor, selecciona un producto válido.", "error");
-            if (!cant || cant <= 0) return mostrarAlerta("Ingresa una cantidad mayor a cero.", "error");
-
-            if (tipoSel === 'Salida') {
-                const stockDisponible = window.stockGlobal ? (window.stockGlobal[idProd] || 0) : 0;
-                if (cant > stockDisponible) {
-                    return mostrarAlerta(`No podés retirar ${cant}. Solo tenés ${stockDisponible} en stock.`, "error");
-                }
-            }
-
-            btn.disabled = true; 
-            btn.innerText = "GUARDANDO...";
-            
-            try {
-                const d = new Date();
-                const fechaAppSheet = `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()} ${d.getHours()}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}`;
-
-                await callAppSheet(API.mov, "Add", [{
-                    "PRODUCTO": idProd, 
-                    "CANTIDAD": cant, 
-                    "TIPO": tipoSel, 
-                    "FECHA": fechaAppSheet
-                }]);
-                
-                mostrarAlerta("¡Movimiento guardado exitosamente!", "exito"); 
-                cantInput.value = ''; 
-                abrirCarga(); 
-                
-            } catch (e) { 
-                mostrarAlerta(e.message, "error"); 
-            }
-            
-            btn.disabled = false; 
-            btn.innerText = "CONFIRMAR";
-        }
 async function confirmarNuevoProducto() {
             const nInput = document.getElementById('new-prod-nombre');
             const iInput = document.getElementById('new-prod-inicial');
