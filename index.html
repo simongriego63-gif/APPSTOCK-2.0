@@ -263,47 +263,71 @@
         }
 
         // 3. LA VISTA DE PRODUCTOS (También arrancando en 0)
+      // --- FUNCIÓN DE CARGA ULTRA RÁPIDA (CON CACHÉ) ---
         async function verProductos() {
-            showPage('productos');
-            const cont = document.getElementById('lista-prods');
-            cont.innerHTML = '<div class="text-center py-10"><i class="fas fa-circle-notch fa-spin text-3xl text-blue-500 mb-2"></i><p class="text-slate-400 italic">Sincronizando...</p></div>';
-            try {
-                const [prods, movs] = await Promise.all([callAppSheet(API.prod, "Find"), callAppSheet(API.mov, "Find")]);
-                const stockMap = {};
-                
-                // MAGIA: Arrancamos en 0
-                prods.forEach(p => stockMap[getId(p)] = 0);
-                movs.forEach(m => {
-                    const cant = parseInt(m.CANTIDAD) || 0;
-                    if (m.TIPO === 'Entrada') stockMap[m.PRODUCTO] += cant;
-                    else stockMap[m.PRODUCTO] -= cant;
-                });
-                
-                if(prods.length === 0) {
-                    cont.innerHTML = '<p class="text-center text-slate-400 font-bold mt-10">No hay productos. ¡Creá uno!</p>';
-                    return;
-                }
+            const lista = document.getElementById('lista-prods');
+            
+            // 1. EL "FLASH": Buscamos si tenemos una foto guardada de la última vez
+            const cache = localStorage.getItem('cache_productos');
+            if (cache) {
+                const datosViejos = JSON.parse(cache);
+                // Si hay cache, la mostramos AL INSTANTE
+                renderizarLista(datosViejos);
+                console.log("Mostrando versión rápida de la memoria...");
+            } else {
+                // Si es la primerísima vez, mostramos el cargando de siempre
+                lista.innerHTML = '<div class="text-center py-20"><i class="fas fa-circle-notch fa-spin text-4xl text-blue-500 mb-4"></i><p class="text-slate-400 animate-pulse">Conectando con el depósito...</p></div>';
+            }
 
-                cont.innerHTML = prods.map(p => {
-                    const idReal = getId(p);
-                    const stock = stockMap[idReal] || 0;
-                    const min = parseInt(p["STOCK MINIMO"]) || 0;
-                    const bajo = stock <= min;
-                    return `
-                    <div class="bg-white p-5 rounded-2xl border ${bajo ? 'border-red-200 bg-red-50' : 'border-slate-100'} shadow-sm flex justify-between items-center">
-                        <div class="flex-1">
-                            <p class="font-bold text-slate-700">${p.NOMBRE}</p>
-                            <p class="text-[10px] text-slate-400 font-bold uppercase">Stock: ${stock} | Mín: ${min}</p>
-                        </div>
-                        <button onclick="borrarProducto('${idReal}', '${p.NOMBRE}')" class="w-10 h-10 bg-red-50 text-red-500 rounded-xl flex items-center justify-center active:scale-90 transition-transform"><i class="fas fa-trash-can text-sm"></i></button>
-                    </div>`;
-                }).join('');
-            } catch (e) { 
-                cont.innerHTML = '<p class="text-center text-red-500 font-bold mt-10">Fallo de conexión.</p>';
-                mostrarAlerta(e.message, "error"); 
+            try {
+                // 2. LA VERDAD: Vamos a buscar los datos reales al servidor de Google
+                const prods = await callAppSheet(API.prod, "Find");
+                
+                // 3. ACTUALIZACIÓN SILENCIOSA: Guardamos lo nuevo en la memoria y refrescamos la pantalla
+                localStorage.setItem('cache_productos', JSON.stringify(prods));
+                renderizarLista(prods);
+                
+                // Aprovechamos para actualizar el stock global en memoria
+                window.stockGlobal = {};
+                prods.forEach(p => {
+                    window.stockGlobal[p["Row ID"] || p.ID_PRODUCTO] = parseInt(p.STOCK_ACTUAL || 0);
+                });
+
+            } catch (e) {
+                // Si no hay internet, al menos ya tiene lo que estaba en cache
+                if (!cache) mostrarAlerta("Error al conectar: " + e.message, "error");
             }
         }
 
+        // Función auxiliar para dibujar la lista (así no repetimos código)
+        function renderizarLista(prods) {
+            const lista = document.getElementById('lista-prods');
+            if (prods.length === 0) {
+                lista.innerHTML = '<div class="text-center py-20 text-slate-400"><i class="fas fa-box-open text-5xl mb-4 opacity-20"></i><p>No hay productos cargados</p></div>';
+                return;
+            }
+
+            lista.innerHTML = prods.map(p => {
+                const stock = parseInt(p.STOCK_ACTUAL || 0);
+                const min = parseInt(p['STOCK MINIMO'] || 0);
+                const colorStock = stock <= min ? 'text-red-500' : 'text-emerald-500';
+                const advertencia = stock <= min ? '<span class="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full ml-2">RECOMPRAR</span>' : '';
+
+                return `
+                    <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 flex items-center justify-between mb-3 animate-fade-in">
+                        <div>
+                            <h3 class="font-black text-slate-800 text-lg uppercase leading-none">${p.NOMBRE}</h3>
+                            <p class="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-widest">Disponible: <span class="${colorStock}">${stock} UNIDADES</span> ${advertencia}</p>
+                        </div>
+                        <div class="flex gap-2">
+                             <button onclick="borrarProducto('${p["Row ID"]}', '${p.NOMBRE}')" class="w-10 h-10 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center hover:bg-red-500 hover:text-white transition-all">
+                                <i class="fas fa-trash-alt text-sm"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
         // 4. EL CREADOR DE MOVIMIENTOS (Mandando la fecha como le gusta a AppSheet)
        async function guardarMov() {
             const btn = document.getElementById('btnSave');
@@ -367,48 +391,16 @@
             
             btn.disabled = false; 
             btn.innerText = "CONFIRMAR";
-        }
- async function borrarProducto(id, nombre) {
-            mostrarConfirmacion(`¿Borrar "${nombre}" y TODO su historial?`, async () => {
+async function borrarProducto(id, nombre) {
+            mostrarConfirmacion(`¿Borrar "${nombre}"?`, async () => {
                 try {
-                    // 1. Pantalla de carga
-                    document.getElementById('lista-prods').innerHTML = '<div class="text-center py-10"><i class="fas fa-circle-notch fa-spin text-3xl text-red-500 mb-2"></i><p class="text-slate-400 font-bold">Limpiando historial completo...</p></div>';
-
-                    // 2. Traemos TODOS los movimientos y TODOS los productos para cruzar datos
-                    const [movs, prods] = await Promise.all([
-                        callAppSheet(API.mov, "Find"),
-                        callAppSheet(API.prod, "Find")
-                    ]);
-
-                    // 3. Buscamos el producto actual en la lista completa para obtener su ID de AppSheet (el largo)
-                    const pFull = prods.find(p => p["Row ID"] === id || p.NOMBRE === nombre);
-                    const idAppSheet = pFull ? pFull.ID_PRODUCTO : null;
-
-                    // 4. LA REDADA: Filtramos movimientos que coincidan con CUALQUIERA de estas 3 cosas:
-                    // - El ID que tenemos en la web (id)
-                    // - El Nombre del producto (nombre)
-                    // - El ID interno de AppSheet (idAppSheet) -> ESTE ES EL QUE MATA AL MOVIMIENTO INICIAL
-                    const aBorrar = movs.filter(m => 
-                        m.PRODUCTO === id || 
-                        m.PRODUCTO === nombre || 
-                        (idAppSheet && m.PRODUCTO === idAppSheet)
-                    );
-
-                    // 5. Borramos los movimientos uno por uno o en lote
-                    if (aBorrar.length > 0) {
-                        const payloadMovs = aBorrar.map(m => ({ "ID_MOV": m.ID_MOV }));
-                        await callAppSheet(API.mov, "Delete", payloadMovs);
-                    }
-
-                    // 6. Finalmente borramos el producto
-                    await callAppSheet(API.prod, "Delete", [{ "Row ID": id, "ID_PRODUCTO": id }]);
-
-                    mostrarAlerta("Producto e historial eliminados", "exito");
-                    verProductos();
-
+                    // Borrado directo y sin vueltas
+                    await callAppSheet(API.prod, "Delete", [{ "Row ID": id }]);
+                    
+                    mostrarAlerta("Producto eliminado", "exito");
+                    verProductos(); // Refresca la lista
                 } catch (e) {
                     mostrarAlerta("Error: " + e.message, "error");
-                    verProductos();
                 }
             });
         }
