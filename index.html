@@ -186,19 +186,21 @@
         function cerrarModal() { document.getElementById('modal-producto').classList.add('hidden'); }
 
         // --- CONEXIÓN BLINDADA CON EL PROXY ---
+     // --- CONEXIÓN A LA API (Proxy Ilimitado para GitHub) ---
         async function callAppSheet(tableName, action, rows = []) {
             const urlBase = 'https://api.appsheet.com/api/v2/apps/' + API.id + '/tables/' + tableName + '/Action';
-            const url = 'https://cors-anywhere.herokuapp.com/' + urlBase;
+            
+            // Como ya tenés un link real en GitHub, usamos el proxy libre de límites
+            const url = 'https://corsproxy.org/?' + encodeURIComponent(urlBase);
             
             try {
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: { 
                         'ApplicationAccessKey': API.key, 
-                        'Content-Type': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest' 
+                        'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ "Action": action, "Properties": { "Locale": "es-AR" }, "Rows": rows })
+                    body: JSON.stringify({ "Action": action, "Properties": { "Locale": "es-AR", "Timezone": "America/Argentina/Buenos_Aires" }, "Rows": rows })
                 });
                 
                 if (!response.ok) {
@@ -208,13 +210,9 @@
                 return await response.json();
                 
             } catch (error) {
-                if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError")) {
-                    throw new Error("Proxy bloqueado. Entrá a cors-anywhere.herokuapp.com/corsdemo y tocá el botón para activar.");
-                }
-                throw error;
+                throw new Error("Error de conexión: " + error.message);
             }
         }
-
         // --- HERRAMIENTAS NUEVAS ---
         function getId(fila) {
             return fila["Row ID"] || fila.ID_PRODUCTO;
@@ -359,13 +357,12 @@
         function borrarProducto(id, nombre) {
             mostrarConfirmacion(`¿Borrar el producto "${nombre}"?`, async () => {
                 try {
-                    const payload = id ? { "ID_PRODUCTO": id } : { "NOMBRE": nombre };
-                    await callAppSheet(API.prod, "Delete", [payload]);
+                    // AppSheet nos pide estrictamente la llave "Row ID" para eliminar
+                    await callAppSheet(API.prod, "Delete", [{ "Row ID": id }]);
                     verProductos(); 
                 } catch (e) { mostrarAlerta(e.message, "error"); }
             });
         }
-
         async function verHistorial() {
             showPage('historial');
             const cont = document.getElementById('lista-hist');
