@@ -185,8 +185,7 @@
         function nuevoProdPrompt() { document.getElementById('modal-producto').classList.remove('hidden'); }
         function cerrarModal() { document.getElementById('modal-producto').classList.add('hidden'); }
 
-    
-// --- CONEXIÓN A LA API (Proxy Ilimitado para GitHub) ---
+    // --- CONEXIÓN A LA API (Proxy Ilimitado para GitHub) ---
         async function callAppSheet(tableName, action, rows = []) {
             const urlBase = 'https://api.appsheet.com/api/v2/apps/' + API.id + '/tables/' + tableName + '/Action';
             
@@ -214,7 +213,6 @@
             }
         }
 
-    
         // --- HERRAMIENTAS NUEVAS ---
         function getId(fila) {
             return fila["Row ID"] || fila.ID_PRODUCTO;
@@ -355,13 +353,36 @@
             btn.innerText = "CONFIRMAR";
         }
         
-        function borrarProducto(id, nombre) {
-            mostrarConfirmacion(`¿Borrar el producto "${nombre}"?`, async () => {
+    function borrarProducto(id, nombre) {
+            mostrarConfirmacion(`¿Borrar "${nombre}" y TODO su historial de movimientos?`, async () => {
                 try {
-                    // AppSheet nos pide estrictamente la llave "Row ID" para eliminar
+                    // 1. Cambiamos la vista para avisar que estamos limpiando a fondo
+                    document.getElementById('lista-prods').innerHTML = '<div class="text-center py-10"><i class="fas fa-circle-notch fa-spin text-3xl text-red-500 mb-2"></i><p class="text-slate-400 font-bold">Borrando historial...</p></div>';
+
+                    // 2. Traemos la lista completa de movimientos
+                    const movs = await callAppSheet(API.mov, "Find");
+                    
+                    // 3. Filtramos para quedarnos solo con los que le pertenecen a este producto
+                    const movsDelProducto = movs.filter(m => m.PRODUCTO === id);
+                    
+                    // 4. Si encontramos movimientos, armamos un paquete y los borramos todos juntos
+                    if (movsDelProducto.length > 0) {
+                        const payloadMovs = movsDelProducto.map(m => {
+                            return { "Row ID": m["Row ID"] }; 
+                        });
+                        await callAppSheet(API.mov, "Delete", payloadMovs);
+                    }
+
+                    // 5. Una vez limpio el historial, eliminamos el producto maestro
                     await callAppSheet(API.prod, "Delete", [{ "Row ID": id }]);
+                    
+                    mostrarAlerta("Producto y movimientos eliminados", "exito");
                     verProductos(); 
-                } catch (e) { mostrarAlerta(e.message, "error"); }
+                    
+                } catch (e) { 
+                    mostrarAlerta("Error al borrar: " + e.message, "error"); 
+                    verProductos(); 
+                }
             });
         }
         async function verHistorial() {
