@@ -66,21 +66,37 @@
         </div>
     </div>
 
-    <div id="productos-screen" class="hidden max-w-md mx-auto">
+        <div id="productos-screen" class="hidden max-w-md mx-auto">
         <button onclick="showPage('home')" class="mb-6 text-slate-400 font-bold flex items-center gap-2"><i class="fas fa-chevron-left"></i> VOLVER</button>
         <div class="flex justify-between items-center mb-6">
             <h2 class="text-xl font-black text-slate-800 tracking-tight">Inventario</h2>
             <button onclick="verProductos()" class="text-blue-500 text-xs font-bold active:text-blue-700"><i class="fas fa-sync"></i> ACTUALIZAR</button>
         </div>
+        
+        <div class="mb-6 relative">
+            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+                <i class="fas fa-search"></i>
+            </div>
+            <input type="text" id="buscador-productos" onkeyup="filtrarProductos()" placeholder="Buscar producto..." class="w-full pl-11 pr-4 py-4 bg-white border border-slate-100 rounded-2xl outline-none font-bold text-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all shadow-sm">
+        </div>
+
         <div id="lista-prods" class="grid gap-3 mb-24"></div>
         <div onclick="nuevoProdPrompt()" class="fab shadow-xl"><i class="fas fa-plus"></i></div>
     </div>
 
     <div id="historial-screen" class="hidden max-w-md mx-auto">
         <button onclick="showPage('home')" class="mb-6 text-slate-400 font-bold flex items-center gap-2"><i class="fas fa-chevron-left"></i> VOLVER</button>
-        <h2 class="text-xl font-black text-slate-800 mb-6 tracking-tight">Historial</h2>
-        <div id="lista-hist" class="grid gap-3"></div>
+        <h2 class="text-xl font-black text-slate-800 mb-4 tracking-tight">Historial</h2>
+        
+        <div class="flex gap-2 mb-6 bg-slate-200/50 p-1 rounded-2xl">
+            <button id="filtro-todos" onclick="filtrarHistorial('Todos')" class="flex-1 py-2 text-xs font-bold rounded-xl bg-white shadow-sm text-slate-800 transition-all">TODOS</button>
+            <button id="filtro-entradas" onclick="filtrarHistorial('Entrada')" class="flex-1 py-2 text-xs font-bold rounded-xl text-slate-500 hover:text-slate-800 transition-all">ENTRADAS</button>
+            <button id="filtro-salidas" onclick="filtrarHistorial('Salida')" class="flex-1 py-2 text-xs font-bold rounded-xl text-slate-500 hover:text-slate-800 transition-all">SALIDAS</button>
+        </div>
+
+        <div id="lista-hist" class="grid gap-3 mb-6"></div>
     </div>
+
 
     <div id="modal-producto" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-6 z-50">
         <div class="bg-white w-full max-w-xs rounded-[32px] p-8 shadow-2xl">
@@ -262,49 +278,6 @@
             }
         }
 
-          async function verProductos() {
-            showPage('productos');
-            const cont = document.getElementById('lista-prods');
-            cont.innerHTML = '<div class="text-center py-10"><i class="fas fa-circle-notch fa-spin text-3xl text-blue-500 mb-2"></i><p class="text-slate-400 italic">Sincronizando...</p></div>';
-            try {
-                const [prods, movs] = await Promise.all([callAppSheet(API.prod, "Find"), callAppSheet(API.mov, "Find")]);
-                const stockMap = {};
-                
-                // CORRECCIÓN 1: Usamos getId(p) en vez de p.ID_PRODUCTO
-                prods.forEach(p => stockMap[getId(p)] = parseInt(p["STOCK INICIAL"]) || 0);
-                movs.forEach(m => {
-                    const cant = parseInt(m.CANTIDAD) || 0;
-                    if (m.TIPO === 'Entrada') stockMap[m.PRODUCTO] += cant;
-                    else stockMap[m.PRODUCTO] -= cant;
-                });
-                
-                if(prods.length === 0) {
-                    cont.innerHTML = '<p class="text-center text-slate-400 font-bold mt-10">No hay productos. ¡Creá uno!</p>';
-                    return;
-                }
-
-                cont.innerHTML = prods.map(p => {
-                    // CORRECCIÓN 2: Capturamos el ID real para usarlo en el HTML
-                    const idReal = getId(p);
-                    const stock = stockMap[idReal] || 0;
-                    const min = parseInt(p["STOCK MINIMO"]) || 0;
-                    const bajo = stock <= min;
-                    return `
-                    <div class="bg-white p-5 rounded-2xl border ${bajo ? 'border-red-200 bg-red-50' : 'border-slate-100'} shadow-sm flex justify-between items-center">
-                        <div class="flex-1">
-                            <p class="font-bold text-slate-700">${p.NOMBRE}</p>
-                            <p class="text-[10px] text-slate-400 font-bold uppercase">Stock: ${stock} | Mín: ${min}</p>
-                        </div>
-                        <button onclick="borrarProducto('${idReal}', '${p.NOMBRE}')" class="w-10 h-10 bg-red-50 text-red-500 rounded-xl flex items-center justify-center active:scale-90 transition-transform"><i class="fas fa-trash-can text-sm"></i></button>
-                    </div>`;
-                }).join('');
-            } catch (e) { 
-                cont.innerHTML = '<p class="text-center text-red-500 font-bold mt-10">Fallo de conexión.</p>';
-                mostrarAlerta(e.message, "error"); 
-            }
-        }
-
-        // 4. EL CREADOR DE MOVIMIENTOS (Mandando la fecha como le gusta a AppSheet)
        async function guardarMov() {
             const btn = document.getElementById('btnSave');
             const cantInput = document.getElementById('inputCant');
@@ -369,50 +342,171 @@
             btn.innerText = "CONFIRMAR";
         }
 async function borrarProducto(id, nombre) {
-    mostrarConfirmacion(`¿Borrar "${nombre}"?`, async () => {
+    mostrarConfirmacion(`¿Borrar "${nombre}" y todo su historial?`, async () => {
         try {
-            // VOLVEMOS a usar "Row ID" porque AppSheet nos confirmó que exige ese nombre para la clave
+            // 1. Mostramos un aviso para que el usuario sepa que está cargando (puede demorar un segundito más)
+            mostrarAlerta(`Limpiando registros de ${nombre}...`, "info");
+
+            // 2. Traemos TODOS los movimientos
+            const todosLosMovs = await callAppSheet(API.mov, "Find");
+            
+            // 3. Filtramos solo los que pertenecen al producto que queremos borrar
+            const movsDelProducto = todosLosMovs
+                .filter(m => m.PRODUCTO === id)
+                .map(m => ({ "Row ID": m["Row ID"] || m._RowNumber })); // Capturamos el ID de cada movimiento
+
+            // 4. Si encontramos movimientos, mandamos la orden de borrarlos todos juntos
+            if (movsDelProducto.length > 0) {
+                await callAppSheet(API.mov, "Delete", movsDelProducto);
+            }
+
+            // 5. Ahora sí, con el historial limpio, borramos el producto matriz
             await callAppSheet(API.prod, "Delete", [{ "Row ID": id }]);
             
-            mostrarAlerta("Producto eliminado", "exito");
-            verProductos(); // Refresca la lista
+            mostrarAlerta("Producto y movimientos eliminados", "exito");
+            verProductos(); // Refrescamos la lista
+            
         } catch (e) {
-            mostrarAlerta("Error: " + e.message, "error");
+            mostrarAlerta("Error en la limpieza: " + e.message, "error");
         }
     });
 }
 
 
+                // --- VARIABLES GLOBALES EN MEMORIA ---
+        let datosHistorial = [];
+        let mapaNombresHistorial = {};
+        let filtroHistorial = 'Todos';
+        
+        let datosProductos = [];
+        let stockMapaProductos = {};
+
+        // === LÓGICA DE PRODUCTOS Y BUSCADOR ===
+        async function verProductos() {
+            showPage('productos');
+            const cont = document.getElementById('lista-prods');
+            document.getElementById('buscador-productos').value = ''; // Limpiamos buscador
+            
+            cont.innerHTML = '<div class="text-center py-10"><i class="fas fa-circle-notch fa-spin text-3xl text-blue-500 mb-2"></i><p class="text-slate-400 italic">Sincronizando...</p></div>';
+            try {
+                const [prods, movs] = await Promise.all([callAppSheet(API.prod, "Find"), callAppSheet(API.mov, "Find")]);
+                
+                stockMapaProductos = {};
+                prods.forEach(p => stockMapaProductos[getId(p)] = parseInt(p["STOCK INICIAL"]) || 0);
+                
+                movs.forEach(m => {
+                    const cant = parseInt(m.CANTIDAD) || 0;
+                    if (m.TIPO === 'Entrada') stockMapaProductos[m.PRODUCTO] += cant;
+                    else stockMapaProductos[m.PRODUCTO] -= cant;
+                });
+                
+                datosProductos = prods; // Guardamos en RAM
+                renderizarProductos(datosProductos);
+            } catch (e) { 
+                cont.innerHTML = '<p class="text-center text-red-500 font-bold mt-10">Fallo de conexión.</p>';
+                mostrarAlerta(e.message, "error"); 
+            }
+        }
+
+        function filtrarProductos() {
+            const texto = document.getElementById('buscador-productos').value.toLowerCase();
+            const filtrados = datosProductos.filter(p => p.NOMBRE.toLowerCase().includes(texto));
+            renderizarProductos(filtrados);
+        }
+
+        function renderizarProductos(prodsArray) {
+            const cont = document.getElementById('lista-prods');
+            if(prodsArray.length === 0) {
+                cont.innerHTML = '<p class="text-center text-slate-400 font-bold mt-10">No se encontraron productos.</p>';
+                return;
+            }
+            cont.innerHTML = prodsArray.map(p => {
+                const idReal = getId(p);
+                const stock = stockMapaProductos[idReal] || 0;
+                const min = parseInt(p["STOCK MINIMO"]) || 0;
+                const bajo = stock <= min;
+                return `
+                <div class="bg-white p-5 rounded-2xl border ${bajo ? 'border-red-200 bg-red-50' : 'border-slate-100'} shadow-sm flex justify-between items-center">
+                    <div class="flex-1">
+                        <p class="font-bold text-slate-700">${p.NOMBRE}</p>
+                        <p class="text-[10px] text-slate-400 font-bold uppercase">Stock: ${stock} | Mín: ${min}</p>
+                    </div>
+                    <button onclick="borrarProducto('${idReal}', '${p.NOMBRE}')" class="w-10 h-10 bg-red-50 text-red-500 rounded-xl flex items-center justify-center active:scale-90 transition-transform"><i class="fas fa-trash-can text-sm"></i></button>
+                </div>`;
+            }).join('');
+        }
+
+        // === LÓGICA DE HISTORIAL (TOP 20) ===
         async function verHistorial() {
             showPage('historial');
             const cont = document.getElementById('lista-hist');
             cont.innerHTML = '<div class="text-center py-10"><i class="fas fa-circle-notch fa-spin text-3xl text-slate-800 mb-2"></i><p class="text-slate-400 italic">Cargando...</p></div>';
+            
+            filtroHistorial = 'Todos';
+            actualizarBotonesFiltro();
+
             try {
                 const [prods, movs] = await Promise.all([callAppSheet(API.prod, "Find"), callAppSheet(API.mov, "Find")]);
-                const nombresMap = {};
-                prods.forEach(p => nombresMap[getId(p)] = p.NOMBRE);
+                mapaNombresHistorial = {};
+                prods.forEach(p => mapaNombresHistorial[getId(p)] = p.NOMBRE);
                 
-                if(movs.length === 0) {
-                    cont.innerHTML = '<p class="text-center text-slate-400 font-bold mt-10">El historial está vacío.</p>';
-                    return;
-                }
-
-                cont.innerHTML = movs.reverse().slice(0, 15).map(m => {
-                    const nombreFinal = nombresMap[m.PRODUCTO] || m.PRODUCTO || 'Producto Eliminado';
-                    return `
-                    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
-                        <div>
-                            <p class="font-black text-slate-800">${nombreFinal}</p>
-                            <p class="text-[10px] text-slate-400 font-bold uppercase">${fechaArg(m.FECHA)}</p>
-                        </div>
-                        <span class="font-black ${m.TIPO === 'Entrada' ? 'text-emerald-500' : 'text-red-500'} text-lg">${m.TIPO === 'Entrada' ? '+' : '-'}${m.CANTIDAD || 0}</span>
-                    </div>`
-                }).join('');
+                datosHistorial = movs.reverse(); 
+                renderizarHistorial();
             } catch (e) { 
                 cont.innerHTML = '<p class="text-center text-red-500 font-bold mt-10">Error al cargar.</p>';
                 mostrarAlerta(e.message, "error");
             }
         }
+
+        function filtrarHistorial(tipo) {
+            filtroHistorial = tipo;
+            actualizarBotonesFiltro();
+            renderizarHistorial();
+        }
+
+        function actualizarBotonesFiltro() {
+            const btnActivo = "flex-1 py-2 text-xs font-bold rounded-xl bg-white shadow-sm text-slate-800 transition-all";
+            const btnInactivo = "flex-1 py-2 text-xs font-bold rounded-xl text-slate-500 hover:text-slate-800 transition-all";
+            
+            document.getElementById('filtro-todos').className = filtroHistorial === 'Todos' ? btnActivo : btnInactivo;
+            document.getElementById('filtro-entradas').className = filtroHistorial === 'Entrada' ? btnActivo : btnInactivo;
+            document.getElementById('filtro-salidas').className = filtroHistorial === 'Salida' ? btnActivo : btnInactivo;
+        }
+
+        function renderizarHistorial() {
+            const cont = document.getElementById('lista-hist');
+
+            if(datosHistorial.length === 0) {
+                cont.innerHTML = '<p class="text-center text-slate-400 font-bold mt-10">El historial está vacío.</p>';
+                return;
+            }
+
+            let filtrados = datosHistorial;
+            if (filtroHistorial !== 'Todos') {
+                filtrados = datosHistorial.filter(m => m.TIPO === filtroHistorial);
+            }
+
+            if(filtrados.length === 0) {
+                cont.innerHTML = `<p class="text-center text-slate-400 font-bold mt-10">No hay movimientos de ${filtroHistorial.toLowerCase()}.</p>`;
+                return;
+            }
+
+            // ACÁ ESTÁ EL LÍMITE: Cortamos siempre en 20
+            const paraMostrar = filtrados.slice(0, 20);
+
+            cont.innerHTML = paraMostrar.map(m => {
+                const nombreFinal = mapaNombresHistorial[m.PRODUCTO] || m.PRODUCTO || 'Producto Eliminado';
+                return `
+                <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
+                    <div>
+                        <p class="font-black text-slate-800">${nombreFinal}</p>
+                        <p class="text-[10px] text-slate-400 font-bold uppercase">${fechaArg(m.FECHA)}</p>
+                    </div>
+                    <span class="font-black ${m.TIPO === 'Entrada' ? 'text-emerald-500' : 'text-red-500'} text-lg">${m.TIPO === 'Entrada' ? '+' : '-'}${m.CANTIDAD || 0}</span>
+                </div>`
+            }).join('');
+        }
+
 
 async function confirmarNuevoProducto() {
             const nInput = document.getElementById('new-prod-nombre');
