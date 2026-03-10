@@ -367,18 +367,19 @@
             btn.innerText = "CONFIRMAR";
         }
 async function borrarProducto(id, nombre) {
-            mostrarConfirmacion(`¿Borrar "${nombre}"?`, async () => {
-                try {
-                    // Borrado directo y sin vueltas
-                    await callAppSheet(API.prod, "Delete", [{ "Row ID": id }]);
-                    
-                    mostrarAlerta("Producto eliminado", "exito");
-                    verProductos(); // Refresca la lista
-                } catch (e) {
-                    mostrarAlerta("Error: " + e.message, "error");
-                }
-            });
+    mostrarConfirmacion(`¿Borrar "${nombre}"?`, async () => {
+        try {
+            // CORRECCIÓN: Se cambió "Row ID" por "ID_PRODUCTO" para que coincida con tu base
+            await callAppSheet(API.prod, "Delete", [{ "ID_PRODUCTO": id }]);
+            
+            mostrarAlerta("Producto eliminado", "exito");
+            verProductos(); // Refresca la lista
+        } catch (e) {
+            mostrarAlerta("Error: " + e.message, "error");
         }
+    });
+}
+
         async function verHistorial() {
             showPage('historial');
             const cont = document.getElementById('lista-hist');
