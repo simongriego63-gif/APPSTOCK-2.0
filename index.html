@@ -133,6 +133,9 @@
         </div>
     </div>
 <script>
+
+
+    
         // --- CREDENCIALES ---
         const API = {
             id: "927a8f4f-34af-4e0e-8e19-4b304e84b1d2",
@@ -143,6 +146,8 @@
 
         let tipoSel = "Entrada";
         let confirmCallback = null;
+
+    
 
         // --- SISTEMA DE ALERTAS BONITAS ---
         function mostrarAlerta(mensaje, tipo = 'info') {
@@ -186,6 +191,8 @@
         function cerrarAlerta() { document.getElementById('modal-alerta').classList.add('hidden'); }
         function ejecutarConfirmacion() { cerrarAlerta(); if (confirmCallback) confirmCallback(); }
 
+
+    
         // --- NAVEGACIÓN ---
         function showPage(p) {
             document.querySelectorAll('div[id$="-screen"]').forEach(d => d.classList.add('hidden'));
@@ -201,7 +208,10 @@
         function nuevoProdPrompt() { document.getElementById('modal-producto').classList.remove('hidden'); }
         function cerrarModal() { document.getElementById('modal-producto').classList.add('hidden'); }
 
-     // --- CONEXIÓN AL BACKEND PROPIO (Chau Proxies) ---
+
+
+
+    
        // --- CONEXIÓN AL BACKEND (Optimizada para velocidad) ---
         async function callAppSheet(tableName, action, rows = []) {
             const urlBackend = 'https://script.google.com/macros/s/AKfycby36usYgw2JuaQaeI2JOqHqPGuygPK67CJmX4M_1hWdIEQo35dMZcfqRp7ONUqbjBdhlw/exec'; // ¡Pega tu link acá!
@@ -230,13 +240,18 @@
             }
         }
 
-        // --- HERRAMIENTAS NUEVAS ---
+    
+    
+    
+    // --- HERRAMIENTAS NUEVAS ---
         function getId(fila) {
             return fila["Row ID"] || fila.ID_PRODUCTO;
         }
 
  
-        // --- LÓGICA DE LA APP ---
+    
+    
+    // --- LÓGICA DE LA APP ---
        // 1. EL TRADUCTOR DE FECHAS (Ahora respeta el Día/Mes/Año)
         function fechaArg(fechaStr) {
             if (!fechaStr) return '';
@@ -248,6 +263,8 @@
             return fechaStr;
         }
 
+
+    
         // 2. LA CARGA INTERNA (Arrancamos el stock en 0 para no duplicar)
         async function abrirCarga() {
             showPage('movimientos');
@@ -341,6 +358,8 @@
             btn.disabled = false; 
             btn.innerText = "CONFIRMAR";
         }
+
+    
 async function borrarProducto(id, nombre) {
     mostrarConfirmacion(`¿Borrar "${nombre}" y todo su historial?`, async () => {
         try {
@@ -373,7 +392,9 @@ async function borrarProducto(id, nombre) {
 }
 
 
-                // --- VARIABLES GLOBALES EN MEMORIA ---
+        // --- VARIABLES GLOBALES EN MEMORIA ---
+
+    
         let datosHistorial = [];
         let mapaNombresHistorial = {};
         let filtroHistorial = 'Todos';
@@ -381,7 +402,11 @@ async function borrarProducto(id, nombre) {
         let datosProductos = [];
         let stockMapaProductos = {};
 
-        // === LÓGICA DE PRODUCTOS Y BUSCADOR ===
+    
+    
+    
+    // === LÓGICA DE PRODUCTOS Y BUSCADOR ===
+    
         async function verProductos() {
             showPage('productos');
             const cont = document.getElementById('lista-prods');
@@ -392,7 +417,9 @@ async function borrarProducto(id, nombre) {
                 const [prods, movs] = await Promise.all([callAppSheet(API.prod, "Find"), callAppSheet(API.mov, "Find")]);
                 
                 stockMapaProductos = {};
-                prods.forEach(p => stockMapaProductos[getId(p)] = parseInt(p["STOCK INICIAL"]) || 0);
+                
+                // CORRECCIÓN: Arrancamos en 0 para que los movimientos calculen el total real y no se duplique
+                prods.forEach(p => stockMapaProductos[getId(p)] = 0);
                 
                 movs.forEach(m => {
                     const cant = parseInt(m.CANTIDAD) || 0;
@@ -407,6 +434,7 @@ async function borrarProducto(id, nombre) {
                 mostrarAlerta(e.message, "error"); 
             }
         }
+       
 
         function filtrarProductos() {
             const texto = document.getElementById('buscador-productos').value.toLowerCase();
@@ -436,6 +464,8 @@ async function borrarProducto(id, nombre) {
             }).join('');
         }
 
+
+    
         // === LÓGICA DE HISTORIAL (TOP 20) ===
         async function verHistorial() {
             showPage('historial');
